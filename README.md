@@ -1,5 +1,5 @@
-# GAMP II - GOOD, version 2.0
-GAMP II - GOOD (Gnss Observations and prOducts Downloader) is a powerful and easy-to-use lightweight GNSS observations and product downloading toolkit, which is developed by the SASIN (SpAtial SurveyIng and Navigation) group at Shandong University of Science and Technology (SDUST). The current version is 2.0, which is more stable and powerful. Hence, we decide to make it available for global GNSS users, and we are convinced that more and more GNSS users will benefit from GAMP II - GOOD. The source codes of GAMP II - GOOD is now available at GitHub (https://github.com/zhouforme0318/GAMPII-GOOD). We dedicated to create a more powerful GNSS data downloading tool, which can help each GNSS user to get rid of the trouble as much as possible in GNSS data and product downloading.
+# GAMP II - GOOD, version 2.1
+Global Navigation Satellite System (GNSS) data processing requires a user to download various observation and product files. These file downloads, which are particularly important for precise point positioning (PPP), can be a burden for new and experienced GNSS users. Up to now, there are no standalone open-source software tools available to accomplish this task. In order to address this need, we developed an easy-to-use GNSS data and product downloading toolkit called GOOD (GNSS Observations and prOducts Downloader). GOOD is compatible with most popular operating systems, is actively maintained on GitHub, and is stable at the current version 2.1. Furthermore, the source code, user manual, and example usage have been also made available as part of the GPS Toolbox (https://www.ngs.noaa.gov/gps-toolbox/GOOD.shtml).
 # Features
 Main feature of GAMP II - GOOD are various GNSS observations and products downloading, i.e., 
 - IGS daily, hourly, and high-rate observations with short file name (RINEX version 2.xx)
@@ -57,6 +57,8 @@ But it is not limited to these, users can use the source code to expand its func
 - Vers. 1.9  
   Please refer to the header component of FtpUtil.cpp
 - Vers. 2.0  
+  Please refer to the header component of FtpUtil.cpp
+- Vers. 2.1  
   Please refer to the header component of FtpUtil.cpp
 # Install
 The source codes are written in ANSI C/C++, which are cross-platform and can be compiled on Windows, Linux/Unix and Mac OS. NOTE: Double-clicking the executable program does not work for data downloading. The correct way is to type ‘run_GAMP_GOOD  gamp_good.cfg’ on the terminal.

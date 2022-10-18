@@ -76,8 +76,12 @@
 *           2022/01/17      perfect the output information of the log file to more intuitively understand the name of the downloading files (by Feng Zhou @ SDUST)
 *           2022/02/19      change "BRDX*" to "BRD4" for "mixed4" (RINEX 4.xx) broadcast ephemeris file downloading (by Feng Zhou @ SDUST and Zan Liu @ CUMT)
 *           2022/03/19      move the codes for log file writing from "FtpUtil.cpp" to "PreProcess.cpp" (by Feng Zhou @ SDUST)
+*           2022/07/06 2.1  add the configuration file in YAML format (by Feng Zhou and Yuze Yang @ SDUST)
+*           2022/08/01      modify the main function "run_GOOD.cpp" for better adaptation to Windows and Linux, as well as debug and release modes (by Feng Zhou @ SDUST)
+*           2022/09/03      delete the options for selecting sub-directory in relative or absolute path (by Feng Zhou @ SDUST)
+*           2022/10/09      the addition of downloading MGEX prodcuts from Russia Information and Analysis Center (IAC), Japan Aerospace Exploration Agency (JAXA), and Shanghai Observatory (SHAO) (by Feng Zhou @ SDUST)
 *-----------------------------------------------------------------------------*/
-#include "Good.h"
+#include "GOOD.h"
 #include "TimeUtil.h"
 #include "StringUtil.h"
 #include "FtpUtil.h"
@@ -5231,33 +5235,29 @@ void FtpUtil::GetNav(gtime_t ts, const char dir[], const ftpopt_t *fopt)
         chdir(subDir.c_str());
 #endif
 
-        string navFile, nav0File;
+        string navFile;
         if (navSys == "gps")
         {
             /* GPS broadcast ephemeris file */
             navFile = "brdc" + sDoy + "0." + sYy + "n";
-            nav0File = "brdc" + sDoy + "0." + sYy + "n";
         }
         else if (navSys == "glo")
         {
             /* GLONASS broadcast ephemeris file */
             navFile = "brdc" + sDoy + "0." + sYy + "g";
-            nav0File = "brdc" + sDoy + "0." + sYy + "g";
         }
         else if (navSys == "mixed3")
         {
             /* multi-GNSS broadcast ephemeris file in RINEX 3.xx format */
             navFile = "BRDC00" + navAc + "_R_" + sYyyy + sDoy + "0000_01D_MN.rnx";
-            nav0File = "brdm" + sDoy + "0." + sYy + "p";
         }
         else if (navSys == "mixed4")
         {
             /* multi-GNSS broadcast ephemeris file in RINEX 4.xx format */
             navFile = "BRD400DLR_S_" + sYyyy + sDoy + "0000_01D_MN.rnx";
-            nav0File = "brd4" + sDoy + "0." + sYy + "p";
         }
 
-        if (access(navFile.c_str(), 0) == -1 && access(nav0File.c_str(), 0) == -1)
+        if (access(navFile.c_str(), 0) == -1)
         {
             string wgetFull = fopt->wgetFull, gzipFull = fopt->gzipFull, qr = fopt->qr;
             string url, cutDirs = " --cut-dirs=6 ";
@@ -5349,25 +5349,13 @@ void FtpUtil::GetNav(gtime_t ts, const char dir[], const ftpopt_t *fopt)
 
             char tmpFile[MAXSTRPATH] = { '\0' };
             char sep = (char)FILEPATHSEP;
-            sprintf(tmpFile, "%s%c%s", subDir.c_str(), sep, nav0File.c_str());
+            sprintf(tmpFile, "%s%c%s", subDir.c_str(), sep, navFile.c_str());
             string localFile = tmpFile;
             if (access(navFile.c_str(), 0) == -1)
             {
-                cout << "*** INFO(FtpUtil::GetNav): failed to download broadcast ephemeris file " << nav0File << endl;
+                cout << "*** INFO(FtpUtil::GetNav): failed to download broadcast ephemeris file " << navFile << endl;
 
                 if (fopt->fpLog) fprintf(fopt->fpLog, "* WARNING(GetNav): %s  ->  %s  failed\n", url0.c_str(), localFile.c_str());
-            }
-
-            if (navSys == "mixed3" || navSys == "mixed4")
-            {
-                string changeFileName;
-#ifdef _WIN32  /* for Windows */
-                changeFileName = "rename";
-#else          /* for Linux or Mac */
-                changeFileName = "mv";
-#endif
-                cmd = changeFileName + " " + navFile + " " + nav0File;
-                std::system(cmd.c_str());
             }
 
             if (navAc == "GOP")
@@ -5385,9 +5373,9 @@ void FtpUtil::GetNav(gtime_t ts, const char dir[], const ftpopt_t *fopt)
                 }
             }
 
-            if (access(nav0File.c_str(), 0) == 0)
+            if (access(navFile.c_str(), 0) == 0)
             {
-                cout << "*** INFO(FtpUtil::GetNav): successfully download broadcast ephemeris file " << nav0File << endl;
+                cout << "*** INFO(FtpUtil::GetNav): successfully download broadcast ephemeris file " << navFile << endl;
 
                 if (isgz) navxFile = navgzFile;
                 else navxFile = navzFile;
@@ -5395,7 +5383,7 @@ void FtpUtil::GetNav(gtime_t ts, const char dir[], const ftpopt_t *fopt)
                 if (fopt->fpLog) fprintf(fopt->fpLog, "* INFO(GetNav): %s  ->  %s  OK\n", url0.c_str(), localFile.c_str());
             }
         }
-        else cout << "*** INFO(FtpUtil::GetNav): broadcast ephemeris file " << nav0File << " or " <<
+        else cout << "*** INFO(FtpUtil::GetNav): broadcast ephemeris file " << navFile << " or " <<
             navFile << " has existed!" << endl;
     }
     else if (nTyp == "hourly")
@@ -6233,42 +6221,58 @@ void FtpUtil::GetOrbClk(gtime_t ts, std::vector<string> dirs, int prodType, stri
     }
     else if (prodType == PROD_FINAL_MGEX)  /* for MGEX final orbit and clock products */
     {
-        string sp3File, clkFile, sp30File, clk0File, acName;
+        string sp3File, clkFile, subStr, acName;
         if (ac == "cod_m")
         {
             sp3File = "COD0MGXFIN_" + sYyyy + sDoy + "0000_01D_" + "*_ORB.SP3";
             clkFile = "COD0MGXFIN_" + sYyyy + sDoy + "0000_01D_" + "*_CLK.CLK";
-            sp30File = "com" + sWwww + sDow + ".sp3";
-            clk0File = "com" + sWwww + sDow + ".clk";
+            subStr = "COD0MGXFIN_" + sYyyy + sDoy + "0000_01D_";
             acName = "CODE";
         }
         else if (ac == "gfz_m")
         {
             sp3File = "GFZ0MGXRAP_" + sYyyy + sDoy + "0000_01D_" + "*_ORB.SP3";
             clkFile = "GFZ0MGXRAP_" + sYyyy + sDoy + "0000_01D_" + "*_CLK.CLK";
-            sp30File = "gbm" + sWwww + sDow + ".sp3";
-            clk0File = "gbm" + sWwww + sDow + ".clk";
+            subStr = "GFZ0MGXRAP_" + sYyyy + sDoy + "0000_01D_";
             acName = "GFZ";
         }
         else if (ac == "grg_m")
         {
             sp3File = "GRG0MGXFIN_" + sYyyy + sDoy + "0000_01D_" + "*_ORB.SP3";
             clkFile = "GRG0MGXFIN_" + sYyyy + sDoy + "0000_01D_" + "*_CLK.CLK";
-            sp30File = "grm" + sWwww + sDow + ".sp3";
-            clk0File = "grm" + sWwww + sDow + ".clk";
+            subStr = "GRG0MGXFIN_" + sYyyy + sDoy + "0000_01D_";
             acName = "CNES";
+        }
+        else if (ac == "iac_m")
+        {
+            sp3File = "IAC0MGXFIN_" + sYyyy + sDoy + "0000_01D_" + "*_ORB.SP3";
+            clkFile = "IAC0MGXFIN_" + sYyyy + sDoy + "0000_01D_" + "*_CLK.CLK";
+            subStr = "IAC0MGXFIN_" + sYyyy + sDoy + "0000_01D_";
+            acName = "IAC";
+        }
+        else if (ac == "jax_m")
+        {
+            sp3File = "JAX0MGXFIN_" + sYyyy + sDoy + "0000_01D_" + "*_ORB.SP3";
+            clkFile = "JAX0MGXFIN_" + sYyyy + sDoy + "0000_01D_" + "*_CLK.CLK";
+            subStr = "JAX0MGXFIN_" + sYyyy + sDoy + "0000_01D_";
+            acName = "JAXA";
+        }
+        else if (ac == "sha_m")
+        {
+            sp3File = "SHA0MGXRAP_" + sYyyy + sDoy + "0000_01D_" + "*_ORB.SP3";
+            clkFile = "SHA0MGXRAP_" + sYyyy + sDoy + "0000_01D_" + "*_CLK.CLK";
+            subStr = "SHA0MGXRAP_" + sYyyy + sDoy + "0000_01D_";
+            acName = "SHAO";
         }
         else if (ac == "whu_m")
         {
             sp3File = "WUM0MGXFIN_" + sYyyy + sDoy + "0000_01D_" + "*_ORB.SP3";
             clkFile = "WUM0MGXFIN_" + sYyyy + sDoy + "0000_01D_" + "*_CLK.CLK";
-            sp30File = "wum" + sWwww + sDow + ".sp3";
-            clk0File = "wum" + sWwww + sDow + ".clk";
+            subStr = "WUM0MGXFIN_" + sYyyy + sDoy + "0000_01D_";
             acName = "WHU";
         }
 
         std::vector<string> sp3clkFiles = { sp3File, clkFile };
-        std::vector<string> sp3clk0Files = { sp30File, clk0File };
         string sp3gzFile = sp3File + ".gz", clkgzFile = clkFile + ".gz";
         std::vector<string> sp3clkgzFiles = { sp3gzFile, clkgzFile };
         string sp3zFile = sp3File + ".Z", clkzFile = clkFile + ".Z";
@@ -6289,8 +6293,9 @@ void FtpUtil::GetOrbClk(gtime_t ts, std::vector<string> dirs, int prodType, stri
 #else           /* for Linux or Mac */
             chdir(dirs[i].c_str());
 #endif
-
-            if (access(sp3clk0Files[i].c_str(), 0) == -1)
+            string sp3clk0File;
+            str.GetFile(dirs[i], subStr, sp3clk0File);
+            if (access(sp3clk0File.c_str(), 0) == -1)
             {
                 /* it is OK for '*.Z' or '*.gz' format */
                 string cmd = wgetFull + " " + qr + " -nH -A " + sp3clkxFiles[i] + cutDirs + url;
@@ -6299,49 +6304,42 @@ void FtpUtil::GetOrbClk(gtime_t ts, std::vector<string> dirs, int prodType, stri
                 /* extract '*.gz' */
                 cmd = gzipFull + " -d -f " + sp3clkgzFiles[i];
                 std::system(cmd.c_str());
-                string changeFileName;
-#ifdef _WIN32  /* for Windows */
-                changeFileName = "rename";
-#else          /* for Linux or Mac */
-                changeFileName = "mv";
-#endif
-                cmd = changeFileName + " " + sp3clkFiles[i] + " " + sp3clk0Files[i];
-                std::system(cmd.c_str());
                 bool isgz = true;
 
+                str.GetFile(dirs[i], subStr, sp3clk0File);
                 char tmpFile[MAXSTRPATH] = { '\0' };
                 char sep = (char)FILEPATHSEP;
-                sprintf(tmpFile, "%s%c%s", dirs[i].c_str(), sep, sp3clk0Files[i].c_str());
+                sprintf(tmpFile, "%s%c%s", dirs[i].c_str(), sep, sp3clk0File.c_str());
                 string localFile = tmpFile;
-                if (access(sp3clk0Files[i].c_str(), 0) == -1)
+                if (access(sp3clk0File.c_str(), 0) == -1)
                 {
                     /* extract '*.Z' */
                     cmd = gzipFull + " -d -f " + sp3clkzFiles[i];
                     std::system(cmd.c_str());
 
-                    cmd = changeFileName + " " + sp3clkFiles[i] + " " + sp3clk0Files[i];
-                    std::system(cmd.c_str());
-
                     isgz = false;
 
-                    if (access(sp3clk0Files[i].c_str(), 0) == -1)
+                    str.GetFile(dirs[i], subStr, sp3clk0File);
+                    sprintf(tmpFile, "%s%c%s", dirs[i].c_str(), sep, sp3clk0File.c_str());
+                    localFile = tmpFile;
+                    if (access(sp3clk0File.c_str(), 0) == -1)
                     {
                         if (i == 0) cout << "*** WARNING(FtpUtil::GetOrbClk): failed to download " << acName << " MGEX final precise orbit file " <<
-                            sp3clk0Files[i] << endl;
+                            sp3clk0File << endl;
                         else if (i == 1) cout << "*** WARNING(FtpUtil::GetOrbClk): failed to download " << acName << " MGEX final precise clock file " <<
-                            sp3clk0Files[i] << endl;
+                            sp3clk0File << endl;
 
                         string url0 = url + '/' + sp3clkxFiles[i];
                         if (fopt->fpLog) fprintf(fopt->fpLog, "* WARNING(GetOrbClk): %s  ->  %s  failed\n", url0.c_str(), localFile.c_str());
                     }
                 }
 
-                if (access(sp3clk0Files[i].c_str(), 0) == 0)
+                if (access(sp3clk0File.c_str(), 0) == 0)
                 {
                     if (i == 0) cout << "*** INFO(FtpUtil::GetOrbClk): successfully download " << acName << " MGEX final precise orbit file " <<
-                        sp3clk0Files[i] << endl;
+                        sp3clk0File << endl;
                     else if (i == 1) cout << "*** INFO(FtpUtil::GetOrbClk): successfully download " << acName << " MGEX final precise clock file " <<
-                        sp3clk0Files[i] << endl;
+                        sp3clk0File << endl;
 
                     string sp3clkxFile;
                     if (isgz) sp3clkxFile = sp3clkgzFiles[i];
@@ -6352,9 +6350,9 @@ void FtpUtil::GetOrbClk(gtime_t ts, std::vector<string> dirs, int prodType, stri
             }
             else
             {
-                if (i == 0) cout << "*** INFO(FtpUtil::GetOrbClk): " << acName << " MGEX final precise orbit file " << sp3clk0Files[i] <<
+                if (i == 0) cout << "*** INFO(FtpUtil::GetOrbClk): " << acName << " MGEX final precise orbit file " << sp3clk0File <<
                     " has existed!" << endl;
-                else if (i == 1) cout << "*** INFO(FtpUtil::GetOrbClk): " << acName << " MGEX final precise clock file " << sp3clk0Files[i] <<
+                else if (i == 1) cout << "*** INFO(FtpUtil::GetOrbClk): " << acName << " MGEX final precise clock file " << sp3clk0File <<
                     " has existed!" << endl;
             }
         }
@@ -6686,6 +6684,13 @@ void FtpUtil::GetEop(gtime_t ts, const char dir[], const ftpopt_t *fopt)
 **/
 void FtpUtil::GetObx(gtime_t ts, const char dir[], const ftpopt_t *fopt)
 {
+    /* change directory */
+#ifdef _WIN32   /* for Windows */
+    _chdir(dir);
+#else           /* for Linux or Mac */
+    chdir(dir);
+#endif
+
     /* compute GPS week and day of week */
     TimeUtil tu;
     int wwww, dow;
@@ -6706,12 +6711,12 @@ void FtpUtil::GetObx(gtime_t ts, const char dir[], const ftpopt_t *fopt)
     bool isRt = false;
     if (ac == "cnt") isRt = true;
 
-    /* cod_m: CODE multi-GNSS final ORBEX
-       gfz_m: GFZ multi-GNSS final ORBEX
-       grg_m: CNES multi-GNSS final ORBEX
-       whu_m: WHU multi-GNSS final ORBEX
+    /* cod: CODE multi-GNSS final ORBEX
+       gfz: GFZ multi-GNSS final ORBEX
+       grg: CNES multi-GNSS final ORBEX
+       whu: WHU multi-GNSS final ORBEX
     */
-    std::vector<string> acMGEX = { "cod_m", "gfz_m", "grg_m", "whu_m" };
+    std::vector<string> acMGEX = { "cod", "gfz", "grg", "whu" };
     bool isMGEX = false;
     for (int i = 0; i < acMGEX.size(); i++)
     {
@@ -6721,7 +6726,7 @@ void FtpUtil::GetObx(gtime_t ts, const char dir[], const ftpopt_t *fopt)
             break;
         }
     }
-    if (ac == "all_m") isMGEX = true;
+    if (ac == "all") isMGEX = true;
 
     if (!isRt && !isMGEX)
     {
@@ -6729,39 +6734,6 @@ void FtpUtil::GetObx(gtime_t ts, const char dir[], const ftpopt_t *fopt)
 
         return;
     }
-
-    /* creation of sub-directory */
-    string subDir = dir;
-    char tmpDir[MAXSTRPATH] = { '\0' };
-    char sep = (char)FILEPATHSEP;
-    if (isRt)
-    {
-        sprintf(tmpDir, "%s%c%s", dir, sep, "real_time");
-        subDir = tmpDir;
-    }
-    else if (isMGEX)
-    {
-        sprintf(tmpDir, "%s%c%s", dir, sep, "final");
-        subDir = tmpDir;
-    }
-
-    if (access(subDir.c_str(), 0) == -1)
-    {
-        /* If the directory does not exist, creat it */
-#ifdef _WIN32   /* for Windows */
-        string cmd = "mkdir " + subDir;
-#else           /* for Linux or Mac */
-        string cmd = "mkdir -p " + subDir;
-#endif
-        std::system(cmd.c_str());
-    }
-
-    /* change directory */
-#ifdef _WIN32   /* for Windows */
-    _chdir(subDir.c_str());
-#else           /* for Linux or Mac */
-    chdir(subDir.c_str());
-#endif
 
     string ftpName = fopt->ftpFrom;
     str.TrimSpace4String(ftpName);
@@ -6783,7 +6755,7 @@ void FtpUtil::GetObx(gtime_t ts, const char dir[], const ftpopt_t *fopt)
 
             char tmpFile[MAXSTRPATH] = { '\0' };
             char sep = (char)FILEPATHSEP;
-            sprintf(tmpFile, "%s%c%s", subDir.c_str(), sep, obxFile.c_str());
+            sprintf(tmpFile, "%s%c%s", dir, sep, obxFile.c_str());
             string localFile = tmpFile;
             if (access(obxFile.c_str(), 0) == 0)
             {
@@ -6824,37 +6796,40 @@ void FtpUtil::GetObx(gtime_t ts, const char dir[], const ftpopt_t *fopt)
         else if (ftpName == "WHU") url = _ftpArchive.WHU[IDX_OBXM] + "/" + sWwww;
         else url = _ftpArchive.CDDIS[IDX_OBXM] + "/" + sWwww;
 
-        if (ac == "all_m")
+        string dir0 = dir;
+        if (ac == "all")
         {
             for (int i = 0; i < acMGEX.size(); i++)
             {
                 string ac_m = acMGEX[i];
-                string obxFile, obx0File, acName;
-                if (ac_m == "cod_m")
+                string obxFile, subStr, acName;
+                if (ac_m == "cod")
                 {
                     obxFile = "COD0MGXFIN_" + sYyyy + sDoy + "0000_01D_" + "*_ATT.OBX";
-                    obx0File = "com" + sWwww + sDow + ".obx";
+                    subStr = "COD0MGXFIN_" + sYyyy + sDoy + "0000_01D_";
                     acName = "CODE";
                 }
-                else if (ac_m == "gfz_m")
+                else if (ac_m == "gfz")
                 {
                     obxFile = "GFZ0MGXRAP_" + sYyyy + sDoy + "0000_01D_" + "*_ATT.OBX";
-                    obx0File = "gbm" + sWwww + sDow + ".obx";
+                    subStr = "GFZ0MGXRAP_" + sYyyy + sDoy + "0000_01D_";
                     acName = "GFZ";
                 }
-                else if (ac_m == "grg_m")
+                else if (ac_m == "grg")
                 {
                     obxFile = "GRG0MGXFIN_" + sYyyy + sDoy + "0000_01D_" + "*_ATT.OBX";
-                    obx0File = "grm" + sWwww + sDow + ".obx";
+                    subStr = "GRG0MGXFIN_" + sYyyy + sDoy + "0000_01D_";
                     acName = "CNES";
                 }
-                else if (ac_m == "whu_m")
+                else if (ac_m == "whu")
                 {
                     obxFile = "WUM0MGXFIN_" + sYyyy + sDoy + "0000_01D_" + "*_ATT.OBX";
-                    obx0File = "wum" + sWwww + sDow + ".obx";
+                    subStr = "WUM0MGXFIN_" + sYyyy + sDoy + "0000_01D_";
                     acName = "WHU";
                 }
 
+                string obx0File;
+                str.GetFile(dir0, subStr, obx0File);
                 if (access(obx0File.c_str(), 0) == -1)
                 {
                     /* it is OK for '*.Z' or '*.gz' format */
@@ -6866,20 +6841,13 @@ void FtpUtil::GetObx(gtime_t ts, const char dir[], const ftpopt_t *fopt)
                     string obxgzFile = obxFile + ".gz";
                     cmd = gzipFull + " -d -f " + obxgzFile;
                     std::system(cmd.c_str());
-                    string changeFileName;
-#ifdef _WIN32  /* for Windows */
-                    changeFileName = "rename";
-#else          /* for Linux or Mac */
-                    changeFileName = "mv";
-#endif
-                    cmd = changeFileName + " " + obxFile + " " + obx0File;
-                    std::system(cmd.c_str());
                     bool isgz = true;
-                    string obxzFile;
+                    str.GetFile(dir0, subStr, obx0File);
                     char tmpFile[MAXSTRPATH] = { '\0' };
                     char sep = (char)FILEPATHSEP;
-                    sprintf(tmpFile, "%s%c%s", subDir.c_str(), sep, obx0File.c_str());
+                    sprintf(tmpFile, "%s%c%s", dir0.c_str(), sep, obx0File.c_str());
                     string localFile = tmpFile;
+                    string obxzFile;
                     if (access(obx0File.c_str(), 0) == -1)
                     {
                         /* extract '*.Z' */
@@ -6888,9 +6856,9 @@ void FtpUtil::GetObx(gtime_t ts, const char dir[], const ftpopt_t *fopt)
                         std::system(cmd.c_str());
                         isgz = false;
 
-                        cmd = changeFileName + " " + obxFile + " " + obx0File;
-                        std::system(cmd.c_str());
-
+                        str.GetFile(dir0, subStr, obx0File);
+                        sprintf(tmpFile, "%s%c%s", dir0.c_str(), sep, obx0File.c_str());
+                        localFile = tmpFile;
                         if (access(obx0File.c_str(), 0) == -1)
                         {
                             cout << "*** INFO(FtpUtil::GetObx): failed to download " << acName << " MGEX ORBEX file " << obx0File << endl;
@@ -6915,32 +6883,34 @@ void FtpUtil::GetObx(gtime_t ts, const char dir[], const ftpopt_t *fopt)
         }
         else
         {
-            string obxFile, obx0File, acName;
-            if (ac == "cod_m")
+            string obxFile, subStr, acName;
+            if (ac == "cod")
             {
                 obxFile = "COD0MGXFIN_" + sYyyy + sDoy + "0000_01D_" + "*_ATT.OBX";
-                    obx0File = "com" + sWwww + sDow + ".obx";
-                    acName = "CODE";
+                subStr = "COD0MGXFIN_" + sYyyy + sDoy + "0000_01D_";
+                acName = "CODE";
             }
-            else if (ac == "gfz_m")
+            else if (ac == "gfz")
             {
                 obxFile = "GFZ0MGXRAP_" + sYyyy + sDoy + "0000_01D_" + "*_ATT.OBX";
-                obx0File = "gbm" + sWwww + sDow + ".obx";
+                subStr = "GFZ0MGXRAP_" + sYyyy + sDoy + "0000_01D_";
                 acName = "GFZ";
             }
-            else if (ac == "grg_m")
+            else if (ac == "grg")
             {
                 obxFile = "GRG0MGXFIN_" + sYyyy + sDoy + "0000_01D_" + "*_ATT.OBX";
-                obx0File = "grm" + sWwww + sDow + ".obx";
+                subStr = "GRG0MGXFIN_" + sYyyy + sDoy + "0000_01D_";
                 acName = "CNES";
             }
-            else if (ac == "whu_m")
+            else if (ac == "whu")
             {
                 obxFile = "WUM0MGXFIN_" + sYyyy + sDoy + "0000_01D_" + "*_ATT.OBX";
-                obx0File = "wum" + sWwww + sDow + ".obx";
+                subStr = "WUM0MGXFIN_" + sYyyy + sDoy + "0000_01D_";
                 acName = "WHU";
             }
 
+            string obx0File;
+            str.GetFile(dir0, subStr, obx0File);
             if (access(obx0File.c_str(), 0) == -1)
             {
                 /* it is OK for '*.Z' or '*.gz' format */
@@ -6952,20 +6922,13 @@ void FtpUtil::GetObx(gtime_t ts, const char dir[], const ftpopt_t *fopt)
                 string obxgzFile = obxFile + ".gz";
                 cmd = gzipFull + " -d -f " + obxgzFile;
                 std::system(cmd.c_str());
-                string changeFileName;
-#ifdef _WIN32  /* for Windows */
-                changeFileName = "rename";
-#else          /* for Linux or Mac */
-                changeFileName = "mv";
-#endif
-                cmd = changeFileName + " " + obxFile + " " + obx0File;
-                std::system(cmd.c_str());
                 bool isgz = true;
-                string obxzFile;
+                str.GetFile(dir0, subStr, obx0File);
                 char tmpFile[MAXSTRPATH] = { '\0' };
                 char sep = (char)FILEPATHSEP;
-                sprintf(tmpFile, "%s%c%s", subDir.c_str(), sep, obx0File.c_str());
+                sprintf(tmpFile, "%s%c%s", dir0.c_str(), sep, obx0File.c_str());
                 string localFile = tmpFile;
+                string obxzFile;
                 if (access(obx0File.c_str(), 0) == -1)
                 {
                     /* extract '*.Z' */
@@ -6973,10 +6936,10 @@ void FtpUtil::GetObx(gtime_t ts, const char dir[], const ftpopt_t *fopt)
                     cmd = gzipFull + " -d -f " + obxzFile;
                     std::system(cmd.c_str());
                     isgz = false;
-
-                    cmd = changeFileName + " " + obxFile + " " + obx0File;
-                    std::system(cmd.c_str());
-
+                    
+                    str.GetFile(dir0, subStr, obx0File);
+                    sprintf(tmpFile, "%s%c%s", dir0.c_str(), sep, obx0File.c_str());
+                    localFile = tmpFile;
                     if (access(obx0File.c_str(), 0) == -1)
                     {
                         cout << "*** INFO(FtpUtil::GetObx): failed to download " << acName << " MGEX ORBEX file " << obx0File << endl;
@@ -7381,12 +7344,12 @@ void FtpUtil::GetOsb(gtime_t ts, const char dir[], const ftpopt_t *fopt)
     bool isRt = false;
     if (ac == "cnt") isRt = true;
 
-    /* cod_m: CODE multi-GNSS final OSB
-       gfz_m: GFZ multi-GNSS final OSB
-       grg_m: CNES multi-GNSS final OSB
-       whu_m: WHU multi-GNSS final OSB
+    /* cod: CODE multi-GNSS final OSB
+       gfz: GFZ multi-GNSS final OSB
+       grg: CNES multi-GNSS final OSB
+       whu: WHU multi-GNSS final OSB
     */
-    std::vector<string> acMGEX = { "cas_m", "cod_m", "gfz_m", "grg_m", "whu_m" };
+    std::vector<string> acMGEX = { "cas", "cod", "gfz", "grg", "whu" };
     bool isMGEX = false;
     for (int i = 0; i < acMGEX.size(); i++)
     {
@@ -7396,7 +7359,7 @@ void FtpUtil::GetOsb(gtime_t ts, const char dir[], const ftpopt_t *fopt)
             break;
         }
     }
-    if (ac == "all_m") isMGEX = true;
+    if (ac == "all") isMGEX = true;
 
     if (!isRt && !isMGEX)
     {
@@ -7466,49 +7429,53 @@ void FtpUtil::GetOsb(gtime_t ts, const char dir[], const ftpopt_t *fopt)
         else if (ftpName == "WHU") url = _ftpArchive.WHU[IDX_OSBM] + "/" + sWwww;
         else url = _ftpArchive.CDDIS[IDX_OSBM] + "/" + sWwww;
 
-        if (ac == "all_m")
+        string dir0 = dir;
+        if (ac == "all")
         {
             for (int i = 0; i < acMGEX.size(); i++)
             {
                 string ac_m = acMGEX[i];
-                string osbFile, osb0File, acName;
-                if (ac_m == "cas_m")
+                string osbFile, subStr, acName;
+                if (ac_m == "cas")
                 {
                     osbFile = "CAS0MGXRAP_" + sYyyy + sDoy + "0000_01D_" + "*_OSB.BIA";
-                    osb0File = "cas" + sWwww + sDow + ".bia";
+                    subStr = "CAS0MGXRAP_" + sYyyy + sDoy + "0000_01D_";
                     acName = "CAS";
                 }
-                else if (ac_m == "cod_m")
+                else if (ac_m == "cod")
                 {
                     osbFile = "COD0MGXFIN_" + sYyyy + sDoy + "0000_01D_" + "*_OSB.BIA";
-                    osb0File = "com" + sWwww + sDow + ".bia";
+                    subStr = "COD0MGXFIN_" + sYyyy + sDoy + "0000_01D_";
                     acName = "CODE";
                 }
-                else if (ac_m == "gfz_m")
+                else if (ac_m == "gfz")
                 {
                     osbFile = "GFZ0MGXRAP_" + sYyyy + sDoy + "0000_01D_" + "*_OSB.BIA";
-                    osb0File = "gbm" + sWwww + sDow + ".bia";
+                    subStr = "GFZ0MGXRAP_" + sYyyy + sDoy + "0000_01D_";
                     acName = "GFZ";
                 }
-                else if (ac_m == "grg_m")
+                else if (ac_m == "grg")
                 {
                     osbFile = "GRG0MGXFIN_" + sYyyy + sDoy + "0000_01D_" + "*_OSB.BIA";
-                    osb0File = "grm" + sWwww + sDow + ".bia";
+                    subStr = "GRG0MGXFIN_" + sYyyy + sDoy + "0000_01D_";
                     acName = "CNES";
                 }
-                else if (ac_m == "whu_m")
+                else if (ac_m == "whu")
                 {
                     osbFile = "WUM0MGXRAP_" + sYyyy + sDoy + "0000_01D_" + "*_OSB.BIA";
-                    osb0File = "wum" + sWwww + sDow + ".bia";
+                    subStr = "WUM0MGXRAP_" + sYyyy + sDoy + "0000_01D_";
                     acName = "WHU";
                 }
 
+                string osb0File;
+                str.GetFile(dir0, subStr, osb0File);
+                if (ac_m == "cas") osb0File = "CAS0MGXRAP_20220320000_01D_01D_OSB.BIA";  /* The filenames of CAS OSB and DSB have a large degree of overlap */
                 if (access(osb0File.c_str(), 0) == -1)
                 {
                     /* it is OK for '*.Z' or '*.gz' format */
                     string osbxFile = osbFile + ".*";
                     string cmd;
-                    if (ac_m == "cas_m")
+                    if (ac_m == "cas")
                     {
                         string url0 = "ftp://ftp.gipp.org.cn/product/dcb/mgex/" + sYyyy;
                         string cutDirs0 = " --cut-dirs=4 ";
@@ -7525,20 +7492,14 @@ void FtpUtil::GetOsb(gtime_t ts, const char dir[], const ftpopt_t *fopt)
                     string osbgzFile = osbFile + ".gz";
                     cmd = gzipFull + " -d -f " + osbgzFile;
                     std::system(cmd.c_str());
-                    string changeFileName;
-#ifdef _WIN32  /* for Windows */
-                    changeFileName = "rename";
-#else          /* for Linux or Mac */
-                    changeFileName = "mv";
-#endif
-                    cmd = changeFileName + " " + osbFile + " " + osb0File;
-                    std::system(cmd.c_str());
                     bool isgz = true;
-                    string osbzFile;
+                    str.GetFile(dir0, subStr, osb0File);
+                    if (ac_m == "cas") osb0File = "CAS0MGXRAP_20220320000_01D_01D_OSB.BIA";  /* The filenames of CAS OSB and DSB have a large degree of overlap */
                     char tmpFile[MAXSTRPATH] = { '\0' };
                     char sep = (char)FILEPATHSEP;
-                    sprintf(tmpFile, "%s%c%s", dir, sep, osb0File.c_str());
+                    sprintf(tmpFile, "%s%c%s", dir0.c_str(), sep, osb0File.c_str());
                     string localFile = tmpFile;
+                    string osbzFile;
                     if (access(osb0File.c_str(), 0) == -1)
                     {
                         /* extract '*.Z' */
@@ -7547,9 +7508,10 @@ void FtpUtil::GetOsb(gtime_t ts, const char dir[], const ftpopt_t *fopt)
                         std::system(cmd.c_str());
                         isgz = false;
 
-                        cmd = changeFileName + " " + osbFile + " " + osb0File;
-                        std::system(cmd.c_str());
-
+                        str.GetFile(dir0, subStr, osb0File);
+                        if (ac_m == "cas") osb0File = "CAS0MGXRAP_20220320000_01D_01D_OSB.BIA";  /* The filenames of CAS OSB and DSB have a large degree of overlap */
+                        sprintf(tmpFile, "%s%c%s", dir0.c_str(), sep, osb0File.c_str());
+                        localFile = tmpFile;
                         if (access(osb0File.c_str(), 0) == -1)
                         {
                             cout << "*** INFO(FtpUtil::GetOsb): failed to download " << acName << " MGEX OSB file " << osb0File << endl;
@@ -7574,44 +7536,47 @@ void FtpUtil::GetOsb(gtime_t ts, const char dir[], const ftpopt_t *fopt)
         }
         else
         {
-            string osbFile, osb0File, acName;
-            if (ac == "cas_m")
+            string osbFile, subStr, acName;
+            if (ac == "cas")
             {
                 osbFile = "CAS0MGXRAP_" + sYyyy + sDoy + "0000_01D_" + "*_OSB.BIA";
-                osb0File = "cas" + sWwww + sDow + ".bia";
+                subStr = "CAS0MGXRAP_" + sYyyy + sDoy + "0000_01D_";
                 acName = "CAS";
             }
-            else if (ac == "cod_m")
+            else if (ac == "cod")
             {
                 osbFile = "COD0MGXFIN_" + sYyyy + sDoy + "0000_01D_" + "*_OSB.BIA";
-                osb0File = "com" + sWwww + sDow + ".bia";
+                subStr = "COD0MGXFIN_" + sYyyy + sDoy + "0000_01D_";
                 acName = "CODE";
             }
-            else if (ac == "gfz_m")
+            else if (ac == "gfz")
             {
                 osbFile = "GFZ0MGXRAP_" + sYyyy + sDoy + "0000_01D_" + "*_OSB.BIA";
-                osb0File = "gbm" + sWwww + sDow + ".bia";
+                subStr = "GFZ0MGXRAP_" + sYyyy + sDoy + "0000_01D_";
                 acName = "GFZ";
             }
-            else if (ac == "grg_m")
+            else if (ac == "grg")
             {
                 osbFile = "GRG0MGXFIN_" + sYyyy + sDoy + "0000_01D_" + "*_OSB.BIA";
-                osb0File = "grm" + sWwww + sDow + ".bia";
+                subStr = "GRG0MGXFIN_" + sYyyy + sDoy + "0000_01D_";
                 acName = "CNES";
             }
-            else if (ac == "whu_m")
+            else if (ac == "whu")
             {
                 osbFile = "WUM0MGXFIN_" + sYyyy + sDoy + "0000_01D_" + "*_OSB.BIA";
-                osb0File = "wum" + sWwww + sDow + ".bia";
+                subStr = "WUM0MGXFIN_" + sYyyy + sDoy + "0000_01D_";
                 acName = "WHU";
             }
 
+            string osb0File;
+            str.GetFile(dir0, subStr, osb0File);
+            if (ac == "cas") osb0File = "CAS0MGXRAP_20220320000_01D_01D_OSB.BIA";  /* The filenames of CAS OSB and DSB have a large degree of overlap */
             if (access(osb0File.c_str(), 0) == -1)
             {
                 /* it is OK for '*.Z' or '*.gz' format */
                 string osbxFile = osbFile + ".*";
                 string cmd;
-                if (ac == "cas_m")
+                if (ac == "cas")
                 {
                     string url0 = "ftp://ftp.gipp.org.cn/product/dcb/mgex/" + sYyyy;
                     string cutDirs0 = " --cut-dirs=4 ";
@@ -7628,20 +7593,14 @@ void FtpUtil::GetOsb(gtime_t ts, const char dir[], const ftpopt_t *fopt)
                 string osbgzFile = osbFile + ".gz";
                 cmd = gzipFull + " -d -f " + osbgzFile;
                 std::system(cmd.c_str());
-                string changeFileName;
-#ifdef _WIN32  /* for Windows */
-                changeFileName = "rename";
-#else          /* for Linux or Mac */
-                changeFileName = "mv";
-#endif
-                cmd = changeFileName + " " + osbFile + " " + osb0File;
-                std::system(cmd.c_str());
                 bool isgz = true;
-                string osbzFile;
+                str.GetFile(dir0, subStr, osb0File);
+                if (ac == "cas") osb0File = "CAS0MGXRAP_20220320000_01D_01D_OSB.BIA";  /* The filenames of CAS OSB and DSB have a large degree of overlap */
                 char tmpFile[MAXSTRPATH] = { '\0' };
                 char sep = (char)FILEPATHSEP;
-                sprintf(tmpFile, "%s%c%s", dir, sep, osb0File.c_str());
+                sprintf(tmpFile, "%s%c%s", dir0.c_str(), sep, osb0File.c_str());
                 string localFile = tmpFile;
+                string osbzFile;
                 if (access(osb0File.c_str(), 0) == -1)
                 {
                     /* extract '*.Z' */
@@ -7650,9 +7609,10 @@ void FtpUtil::GetOsb(gtime_t ts, const char dir[], const ftpopt_t *fopt)
                     std::system(cmd.c_str());
                     isgz = false;
 
-                    cmd = changeFileName + " " + osbFile + " " + osb0File;
-                    std::system(cmd.c_str());
-
+                    str.GetFile(dir0, subStr, osb0File);
+                    if (ac == "cas") osb0File = "CAS0MGXRAP_20220320000_01D_01D_OSB.BIA";  /* The filenames of CAS OSB and DSB have a large degree of overlap */
+                    sprintf(tmpFile, "%s%c%s", dir0.c_str(), sep, osb0File.c_str());
+                    localFile = tmpFile;
                     if (access(osb0File.c_str(), 0) == -1)
                     {
                         cout << "*** INFO(FtpUtil::GetOsb): failed to download " << acName << " MGEX OSB file " << osb0File << endl;
@@ -8489,63 +8449,28 @@ void FtpUtil::FtpDownload(const prcopt_t *popt, ftpopt_t *fopt)
 
     /* setting of the third-party softwares (.i.e, wget, gzip, crx2rnx etc.) */
     StringUtil str;
-    if (fopt->isPath3party)  /* the path of third-party softwares is NOT set in the environmental variable */
+    if (fopt->key43party)  /* the path of third-party softwares is NOT set in the environmental variable */
     {
         char cmdTmp[MAXCHARS] = { '\0' };
         char sep = (char)FILEPATHSEP;
 
-#ifdef _WIN32   /* for Windows */
         /* for wget */
-        sprintf(cmdTmp, "%s%c%s", fopt->dir3party, sep, "wget.exe");
+        sprintf(cmdTmp, "%s%c%s", fopt->dir3party, sep, "wget");
         str.TrimSpace4Char(cmdTmp);
         str.CutFilePathSep(cmdTmp);
-        if (access(cmdTmp, 0) == 0) strcpy(fopt->wgetFull, cmdTmp);
-        else
-        {
-            cout << "*** WARNING(FtpUtil::FtpDownload): wget CANNOT be found, please check the setting of 3partyDir!" << endl;
-
-            return;
-        }
+        strcpy(fopt->wgetFull, cmdTmp);
 
         /* for gzip */
-        sprintf(cmdTmp, "%s%c%s", fopt->dir3party, sep, "gzip.exe");
+        sprintf(cmdTmp, "%s%c%s", fopt->dir3party, sep, "gzip");
         str.TrimSpace4Char(cmdTmp);
         str.CutFilePathSep(cmdTmp);
-        if (access(cmdTmp, 0) == 0) strcpy(fopt->gzipFull, cmdTmp);
-        else
-        {
-            cout << "*** WARNING(FtpUtil::FtpDownload): gzip CANNOT be found, please check the setting of 3partyDir!" << endl;
-
-            return;
-        }
-
-        /* for crx2rnx */
-        sprintf(cmdTmp, "%s%c%s", fopt->dir3party, sep, "crx2rnx.exe");
-        str.TrimSpace4Char(cmdTmp);
-        str.CutFilePathSep(cmdTmp);
-        if (access(cmdTmp, 0) == 0) strcpy(fopt->crx2rnxFull, cmdTmp);
-        else
-        {
-            cout << "*** WARNING(FtpUtil::FtpDownload): crx2rnx CANNOT be found, please check the setting of 3partyDir!" << endl;
-
-            return;
-        }
-#else           /* for Linux or Mac */
-        str.SetStr(fopt->wgetFull, "wget", 5);
-        str.SetStr(fopt->gzipFull, "gzip", 5);
+        strcpy(fopt->gzipFull, cmdTmp);
 
         /* for crx2rnx */
         sprintf(cmdTmp, "%s%c%s", fopt->dir3party, sep, "crx2rnx");
         str.TrimSpace4Char(cmdTmp);
         str.CutFilePathSep(cmdTmp);
-        if (access(cmdTmp, 0) == 0) strcpy(fopt->crx2rnxFull, cmdTmp);
-        else
-        {
-            cout << "*** WARNING(FtpUtil::FtpDownload): crx2rnx CANNOT be found, please check the setting of 3partyDir!" << endl;
-
-            return;
-        }
-#endif
+        strcpy(fopt->crx2rnxFull, cmdTmp);
     }
     else  /* the path of third-party softwares is set in the environmental variable */
     {
@@ -8707,7 +8632,7 @@ void FtpUtil::FtpDownload(const prcopt_t *popt, ftpopt_t *fopt)
                     }
                     else
                     {
-                        std::vector<string> acs_mgex = { "cod_m", "gfz_m", "grg_m", "whu_m" };
+                        std::vector<string> acs_mgex = { "cod_m", "gfz_m", "grg_m", "iac_m", "jax_m", "sha_m", "whu_m" };
                         for (int j = 0; j < acs_mgex.size(); j++)
                         {
                             string ac_j = acs_mgex[j];
@@ -8727,7 +8652,7 @@ void FtpUtil::FtpDownload(const prcopt_t *popt, ftpopt_t *fopt)
             if (ac == "all" || ac == "all_m")
             {
                 if (ac == "all") acs = { "cod", "emr", "esa", "gfz", "grg", "igs", "jpl", "mit" };
-                else if (ac == "all_m") acs = { "cod_m", "gfz_m", "grg_m", "whu_m" };
+                else if (ac == "all_m") acs = { "cod_m", "gfz_m", "grg_m", "iac_m", "jax_m", "sha_m", "whu_m" };
             }
             else acs.push_back(ac);
         }
@@ -8795,9 +8720,12 @@ void FtpUtil::FtpDownload(const prcopt_t *popt, ftpopt_t *fopt)
             /* cod_m: CODE multi-GNSS final orbit and clock products
                gfz_m: GFZ multi-GNSS final orbit and clock products
                grg_m: CNES multi-GNSS final orbit and clock products
-               whu_m: WHU multi-GNSS final orbit and clock products
+               iac_m: Russia Information and Analysis Center (IAC) multi-GNSS final orbit and clock products
+               jax_m: Japan Aerospace Exploration Agency (JAXA) multi-GNSS final orbit and clock products
+               sha_m: Shanghai Observatory (SHAO) multi-GNSS final orbit and clock products
+               whu_m: Wuhan University (WHU) multi-GNSS final orbit and clock products
             */
-            std::vector<string> acMGEX = { "cod_m", "gfz_m", "grg_m", "whu_m" };
+            std::vector<string> acMGEX = { "cod_m", "gfz_m", "grg_m", "iac_m", "jax_m", "sha_m", "whu_m" };
             for (int i = 0; i < acMGEX.size(); i++)
             {
                 if (ac_i == acMGEX[i])

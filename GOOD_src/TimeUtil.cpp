@@ -10,8 +10,7 @@
 *           2020/09/12      fix a bug (missing t1 = t0) in TimeAdd (by Yuze Yang and Feng Zhou)
 *           2020/10/25      add VectorXd type for date (by Feng Zhou)
 *-----------------------------------------------------------------------------*/
-#include "Good.h"
-#include <math.h>
+#include "GOOD.h"
 #include "TimeUtil.h"
 
 

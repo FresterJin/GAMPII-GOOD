@@ -45,6 +45,13 @@ public:
     **/
     string yy2str(int yy);
 
+    /**
+    * @brief   : doy2str - convert from integer DOY to string DOY
+    * @param[I]: doy (day of year)
+    * @param[O]: none
+    * @return  : DOY in string format
+    * @note    :
+    **/
     string doy2str(int doy);
 
     /**
@@ -80,9 +87,30 @@ public:
     * @note      :
     **/
     void ToLower(string &str);
+    
+    /**
+    * @brief   : str2num - convert substring in string to number
+    * @param[I]: s (string ("... nnn.nnn ..."))
+    * @param[I]: i,n (substring position and width)
+    * @param[O]: none
+    * @return  : converted number (0.0:error)
+    * @note    :
+    **/
+    double str2num(const char *s, int i, int n);
 
     /**
-    * @brief   : SetStr - set string without tail space
+    * @brief   : num2str - convert number to string
+    * @param[I]: num (integer number)
+    * @param[I]: len (length of the string)
+    * @param[O]: str (string)
+    * @return  : none
+    * @note    :
+    **/
+    void num2str(int num, char *str, int len);
+
+    /**
+    * @brief   : 
+    - set string without tail space
     * @param[O]: dst (destination string)
     * @param[I]: src (source string)
     * @param[I]: n (substring width)
@@ -111,7 +139,7 @@ public:
     void TrimSpace4String(string &s);
 
     /**
-    * @brief     : TrimSpace4Char - trim head and tail space of the string
+    * @brief     : TrimSpace - trim head and tail space of the string
     * @param[I/O]: dstsrc (destination string (may be with head and tail space) and
     *              source string (without head and tail space))
     * @return    : none
@@ -126,6 +154,16 @@ public:
     * @note      :
     **/
     void CutFilePathSep(char *strPath);
+
+    /**
+    * @brief   : GetFile - get the full name of a specific file from the current directory
+    * @param[I]: dir (the current directory)
+    * @param[I]: str (string to match)
+    * @param[O]: fileName (the full name of a specific file)
+    * @return  : true: found, false: NOT found
+    * @note    :
+    **/
+    bool GetFile(string dir, string str, string &fileName);
 
     /**
     * @brief   : GetFilesAll - get the name list of all the files from the current directory

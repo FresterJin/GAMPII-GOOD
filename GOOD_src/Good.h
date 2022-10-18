@@ -31,6 +31,9 @@
 using namespace std;
 
 /* constant definitions ----------------------------------------------------------*/
+#define readCfgTxt      1         /* to read configurations through TXT */
+#define readCfgYaml     2         /* to read configurations through YAML */
+
 #define MAXCHARS        1024      /* maximum characters in one line */
 #define MAXSTRPATH      1024      /* max length of stream path */
 
@@ -95,7 +98,7 @@ struct ftpopt_t
     bool getAtx;                  /* (0:off  1:on) ANTEX format antenna phase center correction */
     char dir3party[MAXSTRPATH];   /* (optional) the directory where third-party softwares (i.e., 'wget', 'gzip', 'crx2rnx' etc) are stored. 
                                      This option is not needed if you have set the path or environment variable for them */
-    bool isPath3party;            /* if true: the path need be set for third-party softwares */
+    bool key43party;              /* if true: the path need be set for third-party softwares */
     char wgetFull[MAXCHARS];      /* if isPath3party == true, set the full path where 'wget' is */
     char gzipFull[MAXCHARS];      /* if isPath3party == true, set the full path where 'gzip' is */
     char crx2rnxFull[MAXCHARS];   /* if isPath3party == true, set the full path where 'crx2rnx' is */

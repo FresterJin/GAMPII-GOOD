@@ -1,18 +1,16 @@
 /*------------------------------------------------------------------------------
 * StringUtil.cpp : string functions
 *
-* Copyright (C) 2020-2099 by SpAtial SurveyIng and Navigation (SASIN) group, all rights reserved.
-*    This file is part of GAMP II - GOOD (Gnss Observations and prOducts Downloader) toolkit
+* Copyright (C) 2020-2099 by SpAtial SurveyIng and Navigation (SASIN) Group, all rights reserved.
+*    This file is part of GAMP II - iPPP-RTK (intelligent PPP and RTK processing software)
 *
 * References:
 *    
+*
 * history : 2020/09/25 1.0  new (by Feng Zhou)
 *-----------------------------------------------------------------------------*/
-#include "Good.h"
+#include "GOOD.h"
 #include "StringUtil.h"
-
-
-/* constants/macros ----------------------------------------------------------*/
 
 
 /* function definition -------------------------------------------------------*/
@@ -128,6 +126,50 @@ void StringUtil::ToLower(string &str)
 {
     for (int i = 0; i < str.size(); i++) str[i] = tolower(str[i]);
 } /* end of ToLower */
+
+/**
+* @brief   : str2num - convert substring in string to number
+* @param[I]: s (string ("... nnn.nnn ..."))
+* @param[I]: i,n (substring position and width)
+* @param[O]: none
+* @return  : converted number (0.0:error)
+* @note    :
+**/
+double StringUtil::str2num(const char *s, int i, int n)
+{
+    double value;
+    char str[MAXCHARS], *p = str;
+
+    if (i < 0 || (int)strlen(s) < i || (int)sizeof(str) - 1 < n) return 0.0;
+    for (s += i; *s && --n >= 0; s++) *p++ = *s == 'd' || *s == 'D' ? 'E' : *s; *p = '\0';
+    return sscanf(str, "%lf", &value) == 1 ? value : 0.0;
+} /* end of str2num */
+
+/**
+* @brief   : num2str - convert number to string
+* @param[I]: num (integer number)
+* @param[I]: len (length of the string)
+* @param[O]: str (string)
+* @return  : none
+* @note    :
+**/
+void StringUtil::num2str(int num, char *str, int len)
+{
+    int n = len - (int)(log10((float)num)) - 1;
+    char tmp[MAXCHARS] = { '\0' };
+    if (n < 0)
+    {
+        tmp[0] = '\0';
+        return;
+    }
+
+    int j = 0;
+    for (int i = 0; i < n; i++) SetStr(&tmp[j++], "0", 2);
+    
+    char str_tmp[MAXCHARS] = { '\0' };
+    sprintf(str_tmp, "%s%d%c", tmp, num, '\0');
+    SetStr(str, str_tmp, MAXCHARS);
+} /* end of num2str */
 
 /**
 * @brief   : SetStr - set string without tail space
@@ -248,6 +290,67 @@ void StringUtil::CutFilePathSep(char *strPath)
         else break;
     }
 } /* end of CutFilePathSep */
+
+/**
+* @brief   : GetFile - get the full name of a specific file from the current directory
+* @param[I]: dir (the current directory)
+* @param[I]: str (string to match)
+* @param[O]: fileName (the full name of a specific file)
+* @return  : true: found, false: NOT found
+* @note    :
+**/
+bool StringUtil::GetFile(string dir, string str, string &fileName)
+{
+    /* change directory */
+#ifdef _WIN32   /* for Windows */
+    _chdir(dir.c_str());
+#else           /* for Linux or Mac */
+    chdir(dir.c_str());
+#endif
+
+    string cmd, fileList = "files.list";
+#ifdef _WIN32   /* for Windows */
+    cmd = "dir /b | find \"" + str + "\"" + " > " + fileList;
+#else           /* for Linux or Mac */
+    cmd = "ls *" + str + "* > " + fileList;
+#endif
+    std::system(cmd.c_str());
+
+    bool isFound = false;
+    if (access(fileList.c_str(), 0) == 0)
+    {
+        ifstream filLst(fileList.c_str());
+        if (!filLst.is_open())
+        {
+            cerr << "*** ERROR(StringUtil::GetFile): open files.list = " << fileList << " file failed, please check it" << endl;
+
+            return false;
+        }
+
+        string fil;
+        getline(filLst, fil);
+        TrimSpace4String(fil);
+        if (fil.size() > 0)
+        {
+            fileName = fil;
+            isFound = true;
+        }
+        else isFound = false;
+
+        /* close 'files.list' */
+        filLst.close();
+    }
+
+    /* delete 'files.list' */
+#ifdef _WIN32   /* for Windows */
+    cmd = "del " + fileList;
+#else           /* for Linux or Mac */
+    cmd = "rm -rf " + fileList;
+#endif
+    std::system(cmd.c_str());
+
+    return isFound;
+} /* end of GetFile */
 
 /**
 * @brief   : GetFilesAll - get the name list of all the files from the current directory
